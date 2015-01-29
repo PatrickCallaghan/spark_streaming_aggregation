@@ -1,0 +1,5 @@
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+
+// createSchemaRDD is used to implicitly convert an RDD to a SchemaRDD.
+import sqlContext.createSchemaRDD
+

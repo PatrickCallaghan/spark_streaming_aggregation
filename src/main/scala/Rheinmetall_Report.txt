@@ -1,0 +1,25 @@
+Rheinmetall
+
+Rheinmetall are using Cassandra 2.0.9 as part of an application called Hercules. The application has 2 distinct processes, the StreamProcessor (STP) and the MetaDataProcessor (MDP). They were experiencing Timeouts on some of their requests as they were talking more than 8 seconds to process. 
+
+The team had tried different architectures, one with a VM on NAS Storage and one with a dedicated server. Both were seeing similiar problems with Timeouts. We looked at the iostats from a overnight run and we correlated a lot of the timeouts with large no of concurrent read and writes on the data drive. So initially, it seemed to be a straight forward io contention issue. 
+
+We first looked at the infrastructure and as were able to get ssds, we created 4 VMs on a single node, each with 48 GB Ram and 8 cores. Each VM had 2 ssds. Since the application was using the thrift interface, there was no automatic load balancing on the nodes in the cluster so we decided that the STP would use 1 node as its co-ordinater and MDP would use another. 
+
+We then checked the new infrastructure and found some errors that indicated that the production settings were not being picked up by the Cassandra user. After some investigations it turned out that the internal scripts the team use with the application was missing hadn't been updated from an earlier version. We fixed and restarted with the production settings applied. The system initially seemed to have improved but some timeouts started occurring again. 
+
+In the meantime we also worked on the some of the data modelling. We found that their was a bit of room to optimise some other queries and the amount of queries that were being performed. We turned on the GC logs and monitored them also but didn't see any pauses that were over a second. 
+
+We increased the no of concurrent writers on the servers to 64 to help alleviate the write pressure. I will circle back to see if this made any different. 
+	
+Recommendations.
+
+1. Currently the application is only using 2 of the 4 nodes for throughput. This should be increased to use all 4 nodes. This would require changing the applications or maybe just the MDP to round robin around the nodes.
+
+2. There are currently 2 hotspots on 2 tables, the finish_timestamps and updated_users. This is because both use the hyper frame number as a partition key. Because this doesn't change over a 5 minute period this will create hotspots on 1 node in the cluster every 5 minutes. A bucket can be used to distribute this data better around the cluster. 
+
+3. The table users_ready_to_be_exported is currently being used a queue, this unfortunately seems to be causing very long running queries because the application does a 'select * from table' and then a delete from table where id in (.....). Because the select * from table is done every second, there are thousands of tombstones for every select. Both of these statements are causing a effect of the performance of the system. These can be rowed by creating a new row for each new second that users need to be exported.  
+
+4. It's worth keeping an eye on the GC logs to ensure no big pauses are causing any pauses. 
+
+I will keep in contact with Michael and the team over the next few weeks to check on any progress that is made. 

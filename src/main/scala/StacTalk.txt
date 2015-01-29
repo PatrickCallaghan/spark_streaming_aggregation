@@ -1,0 +1,81 @@
+Hi, my name is Patrick Callaghan and I am a solutions architect for DataStax and I am here to talk about time series data. We will talk today about tick data and end of day data but time series data is really anything that has a time element to it like transactions or events.
+
+DataStax is the company that delivers the open source Apache Cassandra database to the enterprise. Financial companies that use Cassandra include UBS, Credit Suisse, JP Morgan, ING. 
+
+Part 1.
+
+Today I wanted to walk you through how I discovered a new way of holding data, a new type of database that would satisfy all the requirements that I needed. 
+
+What I needed from my database was the following
+
+1. Be able to read and write data efficiently, this seems pretty obvious but you would be surprised how ineffective some databases do this, especially document and key values stores. 
+
+2. We wanted to have millions of reads/writes per second but also be able to scale this up if needed.
+
+3. We wanted it be scalable to handle new use cases without having to re-architect the entire system. future proofing really. 
+
+4. We needed it to be fault tolerant. The application was the banks global bank platform with a global user base. Users and clients not being able to see data would be a disaster. 
+
+5. We wanted the database to management itself as much as possible. We didn't have lots of dbas, it was just a couple of developers creating a database so we wanted to avoid any manual interaction what-so-ever
+
+With traditional master/slave databases, data would be held like this. A table of millions maybe billions of rows. Growing at hundreds of millions of rows per day. And that's just for equities. Managing a set of these tables didn't seem like a good idea to us. 
+
+I want to store my data close to my clients. The latency for data from UK to Asia is between 200 and 400 ms. That's for each request. Our SLA required sub second responses so we really needed to replicate our data to each geographic region of our clients. 
+
+So what I wanted was to load data in Europe and have that data replicated to data centers in the us and asia. This then would allow all my clients to access the data with low latencies. 
+
+This would work well in terms of a datacenter failure as the clients could automatically failover to another datacenter.
+
+We were going to be storing a lot of data. So we came up with a retention policy for each type. So Tick data would be held for 2 days all the way down to End of day which would be held forever.
+
+I really didn't want to start running cleanup jobs every night to delete lots of data from my production database, not if I ever wanted to sleep again. It would be great if I could tell the database what I wanted and it would do it automatically for me. 
+
+Part 2 .
+
+Well - its turns out there is only one database that can do all of this for me. 
+
+Cassandra is a distributed database built on a foundation of Google's big table storage layer and Amazon's Dynamo distribution layer. 
+It has continous availability, that's 100% available even when upgrading. 
+It scales linearly - adding nodes adds throughput and storage capacity
+Runs on any commodity hardware. 
+It can run on premise, in the cloud or a hybrid of both.  
+
+If we look at how data is stored in Cassandra, you can see that all the tick data for a specific instrument and date is held on one row. Cassandra has whats called dynamic rows which allows it to store up to 2 Billion columns per row. 
+
+All related data in one row, whether its tick data on one row or the entire history of end of day prices all on one row 
+Writing new data, for example a tick, involves writing 3 columns, no reads needed. 
+For efficiency - data is merged, sorted and stored on disk like this. 
+If we sort our data in descending order, our current data is stored at seek 0. 
+
+This is how we create a table for our tick data in Cassandra. It's called the Cassandra Query Language and as you can see looks very like sql. Also you can see that querying this table is very easy indeed. 
+
+Cassandra's basic architecture allows data to be replicated across data centers asynchronously and in realtime. There are no additional software or processes needed for this replication to happen. 
+
+Clients in Cassandra can be Data center aware so they will only query their local data center. But if that datacenter goes down, the client itself will failover to use the data centers to process their requests. No downtime at all, if when we lose a datacenter.
+
+All the columns in Cassandra have a time to live and this allows us easily to make data for deletion when its no longer needed. So for our tick_data table we can specific a time to live of 2 days with each of our writes. After 2 days the data will be marked for deletion and cassandra will clean it for us. 
+
+I just wanted to add a quick word on apache spark. Spark is a fast distributed for large-scale data processing and it works really well with Cassandra. 
+Ones of its biggest features is realtime streaming which in turn provides realtime analytics. 
+
+There are also for libraries included for Graph processing and machine learning. Spark is fast becoming the analytics tool of choice for data scientists. 
+
+In DataStax Enterprise we package spark with Cassandra and we can separate the 2 concerns of the application. We have our online critical application and we replicate our data to be analysed to our analytics data center. So when we are running our streaming analytics or large batch jobs there is no contention with our critical application.
+
+So what do DataStax bring to the table ? We provide a certified production cassandra along with integration of Solr for search, Hadoop integration with both HortonWorks and Cloudera and of course, integration with Apache Spark. 
+
+Also it includes enterprise security such at data at rest encryption and ldap integration along with a in-memory function for caching hot data. 
+
+Through our web based ops center tool, we provide alerting, monitoring and administration as well as services like scheduling backups and data management. 
+
+So what next, well you can download DataStax enterprise, its free for all non production use along with all the integration we talked about. 
+
+Check out our online training, its free, our demos and code samples.
+
+And please do join us at the european summit in december held here in london.
+
+And Thank you. 
+
+Any questions ? 
+
+
